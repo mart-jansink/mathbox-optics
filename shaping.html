@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Beam shaping</title>
+
+  <script type="text/javascript" charset="utf-8" src="js/vendor/mathbox.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/vendor/jwerty.js"></script>
+
+  <script type="text/javascript" charset="utf-8" src="js/mathbox.mod.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/controls.js"></script>
+
+  <script type="text/javascript" charset="utf-8">
+  $( function() {
+    ThreeBox.preload([
+      "js/vendor/MathBox.glsl.html",
+    ], function() {
+
+      // MathBox boilerplate
+      var mathbox = window.mathbox = mathBox( document.getElementById( "mathbox" ), {
+        cameraControls: true,
+        cursor:         true,
+        controlClass:   ThreeBox.OrbitControls,
+        elementResize:  true,
+        fullscreen:     true,
+        screenshot:     false,
+        stats:          false,
+        scale:          1,
+
+        // don't use perspective
+        camera: new THREE.OrthographicCamera( -1.5, 1.5, 1.5, -1.5, 0.005, 10000 ),
+      } ).start();
+
+
+      window.mathboxSetup( mathbox );
+
+
+
+    // EXTRA CONTROLS
+    } );
+  } );
+  </script>
+  
+  <script type="text/javascript" charset="utf-8">
+
+  window.mathboxSetup = function (mathbox) {
+    mathbox
+      .viewport( {
+        type: "cartesian",
+        range: [ [ 0, 6 ], [ 0, 1 ], [ 0, 6 ] ],
+        scale: [ -1, 1/2, 1 ],
+      } )
+      // 3D view
+      .camera( {
+        orbit: 3.5,
+        phi: π / 4,
+        theta: π / 8
+      } )
+
+      .axis( {
+        id: "z-axis",
+        axis: 2,
+        color: colors.black,
+        ticks: 0,
+        lineWidth: 2,
+        size: .04,
+        labels: false,
+        opacity: .001,
+        mathPosition: [ 3, 0, 6 ],
+        mathScale: [ 0, 0, -1 ]
+      })
+      .axis( {
+        id: "y-axis",
+        axis: 1,
+        color: colors.black,
+        ticks: 0,
+        lineWidth: 2,
+        size: .04,
+        labels: true,
+        zero: false,
+        opacity: .001,
+        mathPosition: [ 3, 0, 6 ]
+      } )
+
+      .surface( {
+        id: "shape",
+        domain: [ [ 0, 6 ], [ 0, 6 ] ],
+        n: [ 128, 128 ],
+        expression: function( x, y ) {
+          var x_ = x-3, y_ = y-3;
+          return [ y, 0, x ];
+        },
+        shaded: true,
+        color: 0xbbbbbb,
+      } )
+
+      .curve( {
+        id: "input",
+        domain: [ 0, 6 ],
+        n: 128,
+        expression: function( x ) {
+          var x_ = x-3;
+          return [ 3, Math.exp( -( x_*x_ / 2 ) ), x ];
+        },
+        lineWidth: 3,
+        opacity: .001,
+        color: colors.green
+      } )
+
+      .curve( {
+        id: "target",
+        domain: [ 0, 6 ],
+        n: 128,
+        expression: function( x ) {
+          return [ 3, 0, x ];
+        },
+        lineWidth: 3,
+        opacity: .001,
+        color: colors.blue,
+        zIndex: .05
+      } )
+
+
+    window.mathboxScript = [
+      [ // animate to gaussian
+        [ "animate", "#shape", {
+          expression: function( x, y ) {
+            var x_ = x-3, y_ = y-3;
+            return [ y, Math.exp( -( (x_*x_ + y_*y_) / 2 ) ), x ];
+          },
+        }, { duration: 300 } ],
+      ],
+
+
+      [ // animate to square
+        [ "animate", "#shape", {
+          expression: function( x, y ) {
+            var x_ = x-3, y_ = y-3;
+            return [ y, ( Math.abs(x_) < .75 && Math.abs(y_) < .75 ) / 2, x ];
+          },
+        }, { duration: 300 } ]
+      ],
+
+      [ // animate to perimeter
+        [ "animate", "#shape", {
+          expression: function( x, y ) {
+            var x_ = x-3, y_ = y-3;
+            var isOuter = ( Math.abs(x_) < .75 && Math.abs(y_) < .75 );
+            var isInner = ( Math.abs(x_) < .6 && Math.abs(y_) < .6 );
+
+
+            return [ y, isOuter / 2 - isInner / 4, x ];
+          }
+        }, { duration: 300 } ]
+      ],
+
+      [ // animate to gaussian
+        [ "animate", "#shape", {
+          expression: function( x, y ) {
+            var x_ = x-3, y_ = y-3;
+            return [ y, Math.exp( -( (x_*x_ + y_*y_) / 2 ) ), x ];
+          },
+        }, { duration: 300 } ],
+      ],
+
+      [
+        [ "animate", "camera", cameras.right, duration ],
+        [ "animate", "#shape", { opacity: 0 }, duration ],
+        [ "animate", "#z-axis", { opacity: 1 }, duration ],
+        [ "animate", "#y-axis", { opacity: 1 }, duration ],
+        [ "set", "#input", { opacity: 1 } ]
+      ],
+
+      [
+        [ "set", "#target", { opacity: 1 } ],
+        [ "animate", "#target", { 
+          expression: function( x ) {
+            var x_ = x-3;
+            return [ 3, ( Math.abs(x_) < .75 ) / 2, x ];
+          }
+        }, duration ]
+      ],
+
+      [ 
+        [ "clone", "#input", {
+          id: "shaped",
+          zIndex: .1
+        } ],
+
+        [ "set", "#input", { color: colors.gray } ],
+        
+        [ "animate", "#shaped", {
+          expression: function( x ) {
+            var x_ = x-3;
+            return [ 3, ( x_ < -.75 ) ? 0 : Math.exp( -( x_*x_ / 2 ) ), x ];
+          }
+        }, duration ],
+
+        [ "animate", "#shaped", {
+          expression: function( x ) {
+            var x_ = x-3;
+            return [ 3, ( Math.abs(x_) > .75 ) ? 0 : Math.exp( -( x_*x_ / 2 ) ), x ];
+          }
+        }, { duration: 150, delay: 50 } ]
+      ],
+        
+      [
+        [ "animate", "#shaped", {
+          expression: function( x ) {
+            var x_ = x-3;
+            return [ 3, ( Math.abs(x_) < .75 ) / 2, x ];
+          }
+        }, duration ]
+      ]
+    ];
+
+
+    // Set up director
+    var script = window.mathboxScript;
+    var director = window.director = new MathBox.Director( mathbox, script );
+
+    // slow down the animation
+    director.stage().speed( 1/3 );
+  }
+
+
+  </script>
+
+  <link href="css/base.css" rel="stylesheet" type="text/css" media="screen">
+</head>
+<body>
+  <div id="mathbox"></div>
+  <div id="controls">
+  </div>
+</body>
+</html>

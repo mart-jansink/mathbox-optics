@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Birefringence</title>
+
+  <script type="text/javascript" charset="utf-8" src="js/vendor/mathbox.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/vendor/jwerty.js"></script>
+
+  <script type="text/javascript" charset="utf-8" src="js/mathbox.mod.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/controls.js"></script>
+
+  <script type="text/javascript" charset="utf-8">
+  $( function() {
+    ThreeBox.preload([
+      "js/vendor/MathBox.glsl.html",
+    ], function() {
+
+      // MathBox boilerplate
+      var mathbox = window.mathbox = mathBox( document.getElementById( "mathbox" ), {
+        cameraControls: true,
+        cursor:         true,
+        controlClass:   ThreeBox.OrbitControls,
+        elementResize:  true,
+        fullscreen:     true,
+        screenshot:     false,
+        stats:          false,
+        scale:          1,
+
+        // don't use perspective
+        camera: new THREE.OrthographicCamera( -1.1, 1.1, .8, -.8, 0.005, 10000 ),
+      } ).start();
+
+      // Set up director
+      var script = window.mathboxScript;
+      var director = window.director = new MathBox.Director( mathbox, script );
+
+      // slow down the animation
+      director.stage().speed( 1/3 );
+
+      window.mathboxSetup( mathbox );
+
+
+
+    // EXTRA CONTROLS
+
+    handleRange( "#birefringent-thickness", function( value ) { return value / 2; }, setThickness );
+    handleRange( "#birefringent-rotation", function( value ) { return value * Math.PI / 4; }, setRotation );
+    } );
+  } );
+  </script>
+  
+  <script type="text/javascript" charset="utf-8">
+
+  function setRotation( rotation, animate ) {
+    mathbox[ animate ? "animate" : "set" ]( "#ellipsoid-rotation", {
+      value: rotation
+    }, duration );
+  }
+
+  function setThickness( rotation, animate ) {
+    mathbox[ animate ? "animate" : "set" ]( "#material-thickness", {
+      value: rotation
+    }, duration );
+  }
+
+
+  window.mathboxSetup = function (mathbox) {
+
+    window.ne = 2; window.no = 1.5; window.ne_ = 1.5;
+
+    window.d = 1; window.l1 = 1; window.l2 = 2;
+
+    mathbox
+      .viewport( {
+        type: "cartesian",
+        range: [ [ 0, 3.2 ], [ -1.2, 1.8 ], [ -1.5, 1.5 ] ],
+        scale: [ 1, .3, -.3 ],
+      } )
+      // 3D view
+      .camera( {
+        orbit: 1.5,
+        phi: π / 4,
+        theta: π / 8
+      } )
+
+      // overarching domain for all three parts of the wave
+      .value( {
+        id: "total-domain",
+        key: "totalDomain"
+      } )
+
+      // rotation of the ellipsoid
+      .value( {
+        id: "ellipsoid-rotation",
+        callback: function( θ ) {
+          // calculate the angle where the horizon intersects the ellipsoid
+          var θ_ = Math.atan( window.no / window.ne * Math.tan( θ ) );
+          // and the corresponding locations
+          var x = window.no * Math.cos( θ_ ), y = window.ne * Math.sin( θ_ );
+
+          window.ne_ = Math.sqrt( x*x + y*y );
+
+          // determine the linear fraction
+          var fraction = 1 - ( window.ne_ - window.no ) / ( window.ne - window.no );
+          // used to manually calculate the interpolate color from blue to green
+          var r = (  48 -  32 ) * fraction +  32,
+              g = ( 112 - 192 ) * fraction + 192,
+              b = ( 240 -  80 ) * fraction + 80;
+
+          mathbox.set( "#horizontal-curve, #horizontal-vector", { color: ( Math.round( r ) * 256 * 256 + Math.round( g ) * 256 + Math.round( b ) ) } );
+        }
+      } )
+
+      // thickness of the birefringent material
+      .value( {
+        id: "material-thickness",
+        callback: function( d ) {
+          window.d = d;
+          mathbox.set( "#birefringent-material-surface, #birefringent-material-line", {
+            mathScale: [ d / 2, 1.5, 1.5 ]
+          } );
+
+          window.l1 = ( 3 - d ) / 2; window.l2 = 3 - l1;
+          
+          // change the domains on which each curve is rendered
+          mathbox.set( "#resultant-curve-1", {
+            domain: [ 0, l1 ]
+          } );
+          mathbox.set( "#resultant-surface-1", {
+            domain: [ [ 0, l1 ], [ 0, 1 ] ]
+          } );
+
+          mathbox.set( "#horizontal-curve, #vertical-curve", {
+            domain: [ l1, l2 ]
+          } );
+          
+          mathbox.set( "#resultant-curve-3", {
+            domain: [ l2, 3 ]
+          } );
+          mathbox.set( "#resultant-surface-3", {
+            domain: [ [ l2, 3 ], [ 0, 1 ] ]
+          } );
+
+        },
+        value: 1.5
+      } )
+
+      // propagating the waves
+      .value( {
+        id: "wave-propagation",
+        callback: function() {
+          var t = director.clock( 0 ), s = 0;
+
+          if ( t > 1 ) {
+            t = director.clock( 0, true );
+          }
+
+          if ( propagation.isStarting ) {
+            if ( t === 0 ) {
+              propagation.running = true;
+              propagation.isStarting = false;
+            }
+            else {
+              window.wavePropagation = t * t / 2;
+              return
+            }
+          }
+
+          if ( propagation.isStopping ) {
+            if ( t === 0 ) {
+              propagation.running = false;
+              propagation.isStopping = false;
+            }
+            else {
+              window.wavePropagation = 1 - ( 1 - t ) * ( 1 - t ) / 2;
+            }
+            return;
+          }
+
+          if ( propagation.running ) {
+            if ( propagation.shouldStop && ( t === 0 ) ) {
+              propagation.isStopping = true;
+              propagation.shouldStop = false;
+            }
+
+            // during start-up, half a wave has been moved
+            window.wavePropagation = t + .5;
+            return
+          }
+        }
+      } )
+
+      // x-y plane
+      .surface( {
+        id: "vertical-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 0, -1.2 ], [ 0, 1.2 ] ],
+          [ [ 3, -1.2 ], [ 3, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .8,
+        live: false,
+      } ).curve( {
+        id: "vertical-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 0, -1.2, -0.005 ], [ 0, 1.2, -0.005 ], [ 3, 1.2, -0.005 ], [ 3, -1.2, -0.005 ], [ 0, -1.2, -0.005 ]
+        ],
+        live: false,
+      } )
+
+      // x-z plane
+      .surface( {
+        id: "horizontal-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 0, 0, -1.2 ], [ 0, 0, 1.2 ] ],
+          [ [ 3, 0, -1.2 ], [ 3, 0, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .8,
+        live: false,
+      } )
+      .curve( {
+        id: "horizontal-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 0, 0.005, -1.2 ], [ 0, 0.005, 1.2 ], [ 3, 0.005, 1.2 ], [ 3, 0.005, -1.2 ], [ 0, 0.005, -1.2 ]
+        ],
+        live: false,
+      } )
+
+      // vertical axis
+      .axis( {
+        id: "vertical-axis",
+        axis: 1,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false,
+        zIndex: -.01,
+      } )
+      // horizontal axis
+      .axis( {
+        id: "horizontal-axis",
+        axis: 2,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false,
+        zIndex: -.01,
+      } )
+      // propagation axis
+      .axis( {
+        id: "propagation-axis",
+        axis: 0,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false
+      } )
+      .curve( {
+        n: 2,
+        data: [ [ 0, 0.01, -0.01 ], [ 3, 0.01, -0.01 ] ],
+        lineWidth: 2,
+        color: colors.black,
+        live: false
+      } )
+
+
+      // first part of resultant wave
+      .curve( {
+        id: "resultant-curve-1",
+        domain: [ 0, 1 ],
+        n: 192,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ), Math.sin( θ ) - 0.005 ];
+        },
+        line: true,
+        lineWidth: 5,
+        color: colors.black,
+      } )
+      .surface( {
+        id: "resultant-surface-1",
+        n: [ 512, 2 ],
+        domain: [ [ 0, 1 ], [ 0, 1 ] ],
+        expression: function ( x, y ) {
+          if ( x > window.totalDomain ) return [x,0];
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ x, Math.sin( θ ) * y, Math.sin( θ ) * y - 0.005 ];
+        },
+        shaded: false,
+        opacity: 1,
+        color: colors.gray,
+      } )
+      .vector( {
+        id: "resultant-vector-1",
+        n: 48,
+        expression: function( i, end ) {
+          var x = i / 16;
+
+          if ( ( x > window.totalDomain ) || ( x >= window.l1 ) ) return [0,0];
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - i/48, 1 ) );
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ) * end * vectorLength, Math.sin( θ ) * end * vectorLength - 0.005 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .04
+      } )
+
+
+      // first polarization
+      .curve( {
+        id: "polarization-curve-1",
+        domain: [ 0, τ ],
+        n: 192,
+        expression: function ( θ, i ) {
+          var length = Math.max( 0, Math.min( window.totalDomain - window.l1, 1 ) );
+
+          return [ window.l1, Math.sin( θ ) * length, Math.sin( θ ) * length ];
+        },
+        line: true,
+        lineWidth: 1,
+        color: colors.purple,
+        zIndex: 0.2
+      } )
+      .vector( {
+        id: "polarization-vector-1",
+        n: 1,
+        expression: function( i, end ) {
+          var length = Math.max( 0, Math.min( window.totalDomain - window.l1, 1 ) );
+
+          var θ = ( window.l1 - window.wavePropagation ) * 2 * π;
+          return [ window.l1, Math.sin( θ ) * end * length, Math.sin( θ ) * end * length ]
+        },
+        color: colors.purple,
+        size: .03,
+        zIndex: 0.3,
+        lineWidth: 4,
+      } )
+
+
+      // the birefringent material
+      .platonic( {
+        id: "birefringent-material-surface",
+        type: "cube",
+        opacity: .001,
+        color: colors.white,
+        live: false,
+        mathScale: [ .5, 1.5, 1.5 ],
+        mathPosition: [ 1.75, 0, 0 ],
+        shaded: false
+      } )
+      .platonic( {
+        id: "birefringent-material-line",
+        type: "cube",
+        opacity: .001,
+        color: colors.gray,
+        live: false,
+        mesh: false,
+        line: true,
+        mathScale: [ .5, 1.5, 1.5 ],
+        mathPosition: [ 1.75, 0, 0 ],
+      } )
+
+
+      // vertical wave
+      .curve( {
+        id: "vertical-curve",
+        domain: [ 0, 1 ],
+        n: 96,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var θy = ( ( x - window.l1 - window.wavePropagation / window.no ) * window.no + window.l1 ) * 2 * π;
+          return [ x, Math.sin( θy ), 0 ];
+        },
+        line: true,
+        lineWidth: 2,
+        color: colors.blue,
+        zIndex: .02
+      } )
+      .vector( {
+        id: "vertical-vector",
+        n: 48,
+        expression: function( i, end ) {
+          var x = i / 16;
+          if ( ( x > window.totalDomain ) || ( x <= window.l1 ) || ( x >= window.l2 ) ) return [0,0];
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - i/48, 1 ) );
+
+          var θy = ( ( x - window.l1 - window.wavePropagation / window.no ) * window.no + window.l1 ) * 2 * π;
+          return [ x, Math.sin( θy ) * end * vectorLength, 0 ]
+        },
+        color: colors.blue,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .02,
+      } )
+
+      // horizontal wave
+      .curve( {
+        domain: [ 0, 1 ],
+        id: "horizontal-curve",
+        n: 96,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var θz = ( ( x - window.l1 - window.wavePropagation / window.ne_ ) * window.ne_ + window.l1 ) * 2 * π;
+          return [ x, 0, Math.sin( θz ) ];
+        },
+        line: true,
+        lineWidth: 2,
+        color: colors.blue,
+        zIndex: .02
+      } )
+      .vector( {
+        id: "horizontal-vector",
+        n: 48,
+        expression: function( i, end ) {
+          var x = i / 16;
+
+          if ( ( x > window.totalDomain ) || ( x <= window.l1 ) || ( x >= window.l2 ) ) return [0,0];
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - i/48, 1 ) );
+
+          var θz = ( ( x - window.l1 - window.wavePropagation / window.ne_ ) * window.ne_ + window.l1 ) * 2 * π;
+          return [ x, 0, Math.sin( θz ) * end * vectorLength ]
+        },
+        color: colors.blue,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .02
+      } )
+
+
+
+      // second polarization
+      .curve( {
+        id: "polarization-curve-2",
+        domain: [ 0, τ ],
+        n: 192,
+        expression: function ( θ, i ) {
+          var length = Math.max( 0, Math.min( window.totalDomain - window.l2 / 1.5, 1 ) );
+
+          var θy = θ + ( window.l1 + window.d * window.no - window.l2 - window.wavePropagation ) * 2 * π;
+          var θz = θ + ( window.l1 + window.d * window.ne_ - window.l2 - window.wavePropagation ) * 2 * π;
+
+          return [ window.l2, Math.sin( θy ) * length, Math.sin( θz ) * length ];
+        },
+        line: true,
+        lineWidth: 1,
+        color: colors.red,
+        zIndex: 0.2
+      } )
+      .vector( {
+        id: "polarization-vector-2",
+        n: 1,
+        expression: function( i, end ) {
+          var length = Math.max( 0, Math.min( window.totalDomain - window.l2 / 1.5, 1 ) );
+
+          var θy = ( window.l2 + window.l1 + window.d * window.no - window.l2 - window.wavePropagation ) * 2 * π;
+          var θz = ( window.l2 + window.l1 + window.d * window.ne_ - window.l2 - window.wavePropagation ) * 2 * π;
+
+          return [ window.l2, Math.sin( θy ) * end * length, Math.sin( θz ) * end * length ]
+        },
+        color: colors.red,
+        size: .03,
+        zIndex: 0.3,
+        lineWidth: 4,
+      } )
+
+
+
+      // third part of resultant wave
+      .curve( {
+        id: "resultant-curve-3",
+        domain: [ 2, 3 ],
+        n: 192,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var θy = ( x + window.l1 + window.d * window.no - window.l2 - window.wavePropagation ) * 2 * π;
+          var θz = ( x + window.l1 + window.d * window.ne_ - window.l2 - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θy ), Math.sin( θz ) - 0.005 ];
+        },
+        line: true,
+        lineWidth: 5,
+        color: colors.black,
+      } )
+      .surface( {
+        id: "resultant-surface-3",
+        n: [ 512, 2 ],
+        domain: [ [ 2, 3 ], [ 0, 1 ] ],
+        expression: function ( x, y ) {
+          if ( x > window.totalDomain ) return [x,0];
+
+          var θy = ( x + window.l1 + window.d * window.no - window.l2 - window.wavePropagation ) * 2 * π;
+          var θz = ( x + window.l1 + window.d * window.ne_ - window.l2 - window.wavePropagation ) * 2 * π;
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ x, Math.sin( θy ) * y, Math.sin( θz ) * y - 0.005 ];
+        },
+        shaded: false,
+        opacity: 1,
+        color: colors.gray
+      } )
+      .vector( {
+        id: "resultant-vector-3",
+        n: 48,
+        expression: function( i, end ) {
+          var x = i / 16;
+
+          if ( ( x > window.totalDomain ) || ( x <= window.l2 ) ) return [0,0];
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - i/48, 1 ) );
+
+          var θy = ( x + window.l1 + window.d * window.no - window.l2 - window.wavePropagation ) * 2 * π;
+          var θz = ( x + window.l1 + window.d * window.ne_ - window.l2 - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θy ) * end * vectorLength, Math.sin( θz ) * end * vectorLength - 0.005 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .04
+      } )
+  }
+
+  /** 
+   * Script
+   */
+  window.mathboxScript = [
+    [
+      // slide in the birefringent material
+      [ "animate", "#birefringent-material-line, #birefringent-material-surface", {
+        opacity: .6,
+        mathPosition: [ 1.5, 0, 0 ]
+      }, duration ]
+    ],
+
+    // draw the resultant wave
+    [
+      [ "animate", "#total-domain", {
+        value: 3
+      }, { duration: 500 } ],
+
+    ]
+  ];
+
+  </script>
+
+  <link href="css/base.css" rel="stylesheet" type="text/css" media="screen">
+</head>
+<body>
+  <div id="mathbox"></div>
+  <div id="controls">
+    <label for="birefringent-thickness">thickness:
+      <input type=range min="0" max="4" value="3" step=".001" id="birefringent-thickness" list="birefringent-thickness-list" data-min="0" data-max="2"/>
+      <datalist id="birefringent-thickness-list">
+        <option>0</option>
+        <option>1</option>
+        <option>2</option>
+        <option>3</option>
+        <option>4</option>
+      </datalist>
+    </label>
+
+    <label for="birefringent-rotation">rotation:
+      <input type=range min="0" max="2" value="0" step=".001" id="birefringent-rotation" list="birefringent-rotation-list" data-min="0" data-max="π/2"/>
+      <datalist id="birefringent-rotation-list">
+        <option>0</option>
+        <option>2</option>
+      </datalist>
+    </label>
+  </div>
+</body>
+</html>

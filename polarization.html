@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Polarization</title>
+
+  <script type="text/javascript" charset="utf-8" src="js/vendor/mathbox.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/vendor/jwerty.js"></script>
+
+  <script type="text/javascript" charset="utf-8" src="js/mathbox.mod.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/controls.js"></script>
+
+  <script type="text/javascript" charset="utf-8">
+  $( function() {
+    ThreeBox.preload([
+      "js/vendor/MathBox.glsl.html",
+    ], function() {
+
+      // mathBox boilerplate
+      var mathbox = window.mathbox = mathBox( document.getElementById( "mathbox" ), {
+        cameraControls: true,
+        cursor:         true,
+        controlClass:   ThreeBox.OrbitControls,
+        elementResize:  true,
+        fullscreen:     true,
+        screenshot:     false,
+        stats:          false,
+        scale:          1,
+
+        // don't use perspective
+        camera: new THREE.OrthographicCamera( -1.1, 1.1, .8, -.8, 0.005, 10000 ),
+      } ).start();
+
+      // set up director
+      var script = window.mathboxScript;
+      var director = window.director = new MathBox.Director( mathbox, script );
+
+      // slow down the animation
+      director.stage().speed( 1/3 );
+
+      window.mathboxSetup( mathbox );
+    } );
+
+
+
+    // EXTRA CONTROLS
+
+    jwerty.key( "R", function() {
+      toggleResultant();
+    } );
+
+    handleRange( "#phase-difference", function( value ) { return value / 4; }, setPhaseDifference );
+  } );
+  </script>
+  
+  <script type="text/javascript" charset="utf-8">
+  // toggle the resultant wave, if any
+  var resultantIsVisible = true;
+  function toggleResultant() {
+    // show or hide the resultant wave
+    mathbox
+      .animate( "#resultant-curve, #resultant-vector, #resultant-surface", {
+        opacity: ( resultantIsVisible ? 0 : 1 )
+      }, duration );
+
+    resultantIsVisible = !resultantIsVisible;
+  }
+
+  function setPhaseDifference( difference, animate ) {
+    mathbox[ animate ? "animate" : "set" ]( "#phase-difference", {
+      value: difference
+    }, duration );
+  }
+
+
+  window.mathboxSetup = function (mathbox) {
+
+    mathbox
+      .viewport( {
+        type: "cartesian",
+        range: [ [ 0, 2.2 ], [ -1.2, 1.8 ], [ -1.5, 1.5 ] ],
+        scale: [ 1, .3, -.3 ],
+      } )
+      // frontal view
+      .camera( {
+        orbit: 3.5,
+        phi: τ/4,
+        theta: 0,
+      } )
+
+      // phase difference between the vertical and horizontal component
+      .value( {
+        id: "phase-difference",
+        key: "phaseDifference"
+      } ) 
+
+      // horizontal component in resultant wave
+      .value( {
+        id: "horizontal-component",
+        key: "horizontalComponent"
+      } )
+
+      // multiplier for the resultant vectors
+      .value( {
+        id: "vector-length",
+        key: "vectorLength"
+      } )
+
+      // propagating the waves
+      .value( {
+        id: "wave-propagation",
+        callback: function() {
+          var t = director.clock( 0 ), s = 0;
+
+          if ( t > 1 ) {
+            t = director.clock( 0, true );
+          }
+
+          if ( propagation.isStarting ) {
+            if ( t === 0 ) {
+              propagation.running = true;
+              propagation.isStarting = false;
+            }
+            else {
+              window.wavePropagation = t * t / 2;
+              return
+            }
+          }
+
+          if ( propagation.isStopping ) {
+            if ( t === 0 ) {
+              propagation.running = false;
+              propagation.isStopping = false;
+            }
+            else {
+              window.wavePropagation = 1 - ( 1 - t ) * ( 1 - t ) / 2;
+            }
+            return;
+          }
+
+          if ( propagation.running ) {
+            if ( propagation.shouldStop && ( t === 0 ) ) {
+              propagation.isStopping = true;
+              propagation.shouldStop = false;
+            }
+
+            // during start-up, half a wave has been moved
+            window.wavePropagation = t + .5;
+            return
+          }
+        }
+      } )
+
+      // x-y plane
+      .surface( {
+        id: "vertical-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 0, -1.2 ], [ 0, 1.2 ] ],
+          [ [ 2, -1.2 ], [ 2, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .001,
+        live: false,
+        zIndex: .01,
+      } ).curve( {
+        id: "vertical-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 0, -1.2, -0.005 ], [ 0, 1.2, -0.005 ], [ 2, 1.2, -0.005 ], [ 2, -1.2, -0.005 ], [ 0, -1.2, -0.005 ]
+        ],
+        live: false,
+        zIndex: .01,
+        opacity: .001
+      } )
+
+      // x-z plane
+      .surface( {
+        id: "horizontal-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 0, 0, -1.2 ], [ 0, 0, 1.2 ] ],
+          [ [ 2, 0, -1.2 ], [ 2, 0, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .8,
+        live: false,
+        zIndex: .01,
+        opacity: .001
+      } )
+      .curve( {
+        id: "horizontal-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 0, 0.005, -1.2 ], [ 0, 0.005, 1.2 ], [ 2, 0.005, 1.2 ], [ 2, 0.005, -1.2 ], [ 0, 0.005, -1.2 ]
+        ],
+        live: false,
+        zIndex: .01,
+        opacity: .001
+      } )
+
+      // vertical axis
+      .axis( {
+        id: "vertical-axis",
+        axis: 1,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false
+      } )
+      // horizontal axis
+      .axis( {
+        id: "horizontal-axis",
+        axis: 2,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false,
+        opacity: .001
+      } )
+      // propagation axis
+      .axis( {
+        id: "propagation-axis",
+        axis: 0,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false
+      } )
+      .curve( {
+        id: "propagation-axis-overlay",
+        n: 2,
+        data: [ [ 0, 0.01, -0.01 ], [ 2, 0.01, -0.01 ] ],
+        lineWidth: 2,
+        color: colors.black,
+        live: false,
+        opacity: .001
+      } )
+
+
+      // resultant wave
+      .curve( {
+        id: "resultant-curve",
+        domain: [ 0, 0 ],
+        n: 192,
+        expression: function ( x, i ) {
+          var θy = ( x - window.wavePropagation ) * 2 * π;
+          var θz = ( x - window.wavePropagation - window.phaseDifference ) * 2 * π;
+          return [ x, Math.sin( θy ), Math.sin( θz ) * window.horizontalComponent - 0.005 ];
+        },
+        line: true,
+        lineWidth: 5,
+        color: colors.black,
+        zIndex: .01
+      } )
+      .surface( {
+        id: "resultant-surface",
+        n: [ 512, 2 ],
+        domain: [ [ 0, 0 ], [ 0, 1 ] ],
+        expression: function ( x, y ) {
+          var θy = ( x - window.wavePropagation ) * 2 * π;
+          var θz = ( x - window.wavePropagation - window.phaseDifference ) * 2 * π;
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ x, Math.sin( θy ) * y, Math.sin( θz ) * y * window.horizontalComponent - 0.005 ];
+        },
+        shaded: false,
+        opacity: 1,
+        color: colors.gray,
+        zIndex: .01
+      } )
+      .vector( {
+        id: "resultant-vector",
+        n: 32,
+        expression: function( i, end ) {
+          var x = i / 32 * 2;
+
+          // modify the vector length slightly per vector
+          var vectorLength_ = Math.max( 0, Math.min( window.vectorLength - i/32, 1 ) );
+
+          var θy = ( x - window.wavePropagation ) * 2 * π;
+          var θz = ( x - window.wavePropagation - window.phaseDifference ) * 2 * π;
+          return [ x, Math.sin( θy ) * end * vectorLength_, Math.sin( θz ) * end * window.horizontalComponent - 0.005 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .04
+      } )
+
+
+      // polarization plane
+      .surface( {
+        id: "polarization-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 2.001, -1.2, -1.2 ], [ 2.001, -1.2, 1.2 ] ],
+          [ [ 2.001, 1.2, -1.2 ], [ 2.001, 1.2, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .001,
+        live: false,
+        zIndex: 0.04
+      } )
+      .curve( {
+        id: "polarization-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 2.002, -1.2, -1.2 ], [ 2.002, -1.2, 1.2 ], [ 2.002, 1.2, 1.2 ], [ 2.002, 1.2, -1.2 ], [ 2.002, -1.2, -1.2 ]
+        ],
+        live: false,
+        zIndex: 0.05,
+        opacity: .001
+      } )
+
+      // polarization
+      .curve( {
+        id: "polarization-curve",
+        domain: [ 0, τ ],
+        n: 192,
+        expression: function ( θ, i ) {
+          return [ 2, Math.sin( θ ), Math.sin( θ - window.phaseDifference * 2 * π  ) * window.horizontalComponent ];
+        },
+        line: true,
+        lineWidth: 1,
+        color: colors.red,
+        zIndex: 0.2,
+        opacity: .001
+      } )
+      .vector( {
+        id: "polarization-vector",
+        n: 1,
+        expression: function( i, end ) {
+          var x = i / 32 * 2;
+          
+          var θy = ( x - window.wavePropagation ) * 2 * π;
+          var θz = ( x - window.wavePropagation - window.phaseDifference ) * 2 * π;
+          return [ 2, Math.sin( θy ) * end, Math.sin( θz ) * end * window.horizontalComponent ]
+        },
+        color: colors.red,
+        size: .03,
+        zIndex: 0.3,
+        lineWidth: 4,
+        opacity: .001
+      } )
+
+  }
+
+  /** 
+   * Script
+   */
+  window.mathboxScript = [
+    // draw the resultant wave
+    [
+      [ "animate", "#resultant-curve", {
+        domain: [ 0, 2 ]
+      }, duration ],
+
+      [ "animate", "#resultant-surface", {
+        domain: [ [ 0, 2 ], [ 0, 1 ] ]
+      }, duration ]
+    ],
+
+    [
+      // add the vector field
+      [ "animate", "#vector-length", {
+        value: 2
+      }, duration ]
+    ],
+
+    [ 
+      // change to a 3D view
+      [ "animate", "camera", {
+        orbit: 1.5,
+        phi: π / 4,
+        theta: π / 8
+      }, duration ],
+
+      [ "animate", "#horizontal-axis",  {
+        opacity: 1
+      }, duration ],
+
+      [ "animate", "#horizontal-plane-surface, #vertical-plane-surface",  {
+        opacity: .8
+      }, duration ],
+
+      [ "animate", "#horizontal-plane-curve, #vertical-plane-curve, #propagation-axis-overlay",  {
+        opacity: 1
+      }, duration ]
+    ],
+
+    [
+      // add the vertical wave
+      [ "add", "curve", {
+        id: "vertical-curve",
+        domain: [ 0, 2 ],
+        n: 96,
+        expression: function ( x, i ) {
+          var θy = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θy ), 0 ];
+        },
+        line: true,
+        lineWidth: 2,
+        color: colors.black,
+        zIndex: .02
+      } ],
+      [ "add", "vector", {
+        id: "vertical-vector",
+        n: 32,
+        expression: function( i, end ) {
+          var x = i / 32 * 2;
+          var θy = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θy ) * end, 0 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .02
+      } ],
+
+      // add the horizontal wave
+      [ "add", "curve", {
+        domain: [ 0, 2 ],
+        id: "horizontal-curve",
+        n: 96,
+        expression: function ( x, i ) {
+          var θz = ( x - window.wavePropagation - window.phaseDifference ) * 2 * π;
+          return [ x, 0, Math.sin( θz ) * window.horizontalComponent ];
+        },
+        line: true,
+        lineWidth: 2,
+        color: colors.black,
+        zIndex: .02
+      } ],
+      [ "add", "vector", {
+        id: "horizontal-vector",
+        n: 32,
+        expression: function( i, end ) {
+          var x = i / 32 * 2;
+          var θz = ( x - window.wavePropagation - window.phaseDifference ) * 2 * π;
+          return [ x, 0, Math.sin( θz ) * end * window.horizontalComponent ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+        zIndex: .02
+      } ],
+
+      // change the linear polarization from 90deg to 45 deg
+      [ "animate", "#horizontal-component", {
+        value: 1
+      }, duration ]
+    ],
+
+    [
+      // color the components
+      [ "animate", "#horizontal-vector, #horizontal-curve", {
+        color: colors.green
+      }, duration ],
+      [ "animate", "#vertical-vector, #vertical-curve", {
+        color: colors.blue
+      }, duration ]
+    ],
+
+    [
+      // show the polarization
+      [ "animate", "#polarization-plane-curve, #polarization-vector, #polarization-curve", {
+        opacity: 1
+      }, duration ],
+      [ "animate", "#polarization-plane-surface", {
+        opacity: .8
+      }, duration ],
+    ]
+  ];
+
+  </script>
+
+  <link href="css/base.css" rel="stylesheet" type="text/css" media="screen">
+</head>
+<body>
+  <div id="mathbox"></div>
+  <div id="controls">
+    <label for="phase-difference">phase difference:
+      <input type=range min="0" max="4" value="0" step=".001" id="phase-difference" list="phase-difference-list" data-min="0" data-max="2π"/>
+      <datalist id="phase-difference-list">
+        <option>0</option>
+        <option>1</option>
+        <option>2</option>
+        <option>3</option>
+        <option>4</option>
+      </datalist>
+    </label>
+  </div>
+</body>
+</html>

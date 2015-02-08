@@ -1,0 +1,60 @@
+html, body { 
+	height: 100%;
+	font-family: sans-serif;
+}
+body { 
+	margin: 0;
+	padding: 0;
+}
+canvas { 
+	display: block
+}
+
+#mathbox {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100%;
+}
+
+#controls {
+	position: absolute;
+	z-index: 999;
+	bottom: 50px;
+	text-align: center;
+	width: 100%;
+}
+
+label {
+	display: inline-block;
+	margin: 0 20px;
+}
+
+input[type=range] {
+  width: 200px;
+  margin-left: 20px;
+  position: relative;
+}
+
+input[type=range]::before, input[type=range]::after {
+  content: "";
+
+  display: block;
+  width: 40px;
+
+  position: absolute;
+  top: 35px;
+
+  font-style: italic;
+  text-align: center;
+  color: #000;
+}
+input[type=range]::before {
+  content: attr( data-min );
+  left: -15px;
+}
+input[type=range]::after {
+  content: attr( data-max );
+  right: -15px;
+}

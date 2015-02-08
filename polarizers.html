@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Polarizers</title>
+
+  <script type="text/javascript" charset="utf-8" src="js/vendor/mathbox.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/vendor/jwerty.js"></script>
+
+  <script type="text/javascript" charset="utf-8" src="js/mathbox.mod.js"></script>
+  <script type="text/javascript" charset="utf-8" src="js/controls.js"></script>
+
+  <script type="text/javascript" charset="utf-8">
+  $( function() {
+    ThreeBox.preload([
+      "js/vendor/MathBox.glsl.html",
+    ], function() {
+
+      // MathBox boilerplate
+      var mathbox = window.mathbox = mathBox( document.getElementById( "mathbox" ), {
+        cameraControls: true,
+        cursor:         true,
+        controlClass:   ThreeBox.OrbitControls,
+        elementResize:  true,
+        fullscreen:     true,
+        screenshot:     false,
+        stats:          false,
+        scale:          1,
+
+        // don't use perspective
+        camera: new THREE.OrthographicCamera( -1.1, 1.1, .8, -.8, 0.005, 10000 ),
+      } ).start();
+
+      // Set up director
+      var script = window.mathboxScript;
+      var director = window.director = new MathBox.Director( mathbox, script );
+
+      // slow down the animation
+      director.stage().speed( 1/3 );
+
+      window.mathboxSetup( mathbox );
+
+
+
+    // EXTRA CONTROLS
+
+    handleRange( "#polarizer-orientation-1", function( value ) { return value * Math.PI / 4; }, setPolarizerOrientation, 1 );
+    handleRange( "#polarizer-orientation-2", function( value ) { return value * Math.PI / 4; }, setPolarizerOrientation, 2 );
+    } );
+  } );
+  </script>
+  
+  <script type="text/javascript" charset="utf-8">
+
+  function setPolarizerOrientation( orientation, animate, p ) {
+    var method = animate ? "animate" : "set";
+
+    mathbox[ method ]( "#polarizer-angle-" + p, {
+      value: orientation
+    }, duration );
+
+    mathbox[ method ]( "#resultant-curve-" + (p+1) + ", #resultant-surface-" + (p+1) + ", #resultant-vector-" + (p+1) + ", #polarizer-" + p + "-surface, #polarizer-" + p + "-lines, #polarizer-" + p + "-cube", {
+        mathRotation: [ orientation, 0, 0 ]
+      }, duration )
+  }
+
+  window.mathboxSetup = function (mathbox) {
+
+    mathbox
+      .viewport( {
+        type: "cartesian",
+        range: [ [ 0, 3.2 ], [ -1.2, 1.8 ], [ -1.5, 1.5 ] ],
+        scale: [ 1, .3, -.3 ],
+      } )
+      // 3D view
+      .camera( {
+        orbit: 1.5,
+        phi: π / 4,
+        theta: π / 8
+      } )
+
+      // orientation of first polarizer
+      .value( {
+        id: "polarizer-angle-1",
+        key: "polarizerAngle1"
+      } ) 
+
+      // orientation of second polarizer
+      .value( {
+        id: "polarizer-angle-2",
+        key: "polarizerAngle2"
+      } )
+
+      // overarching domain for all three parts of the wave
+      .value( {
+        id: "total-domain",
+        key: "totalDomain"
+      } )
+
+      // propagating the waves
+      .value( {
+        id: "wave-propagation",
+        callback: function() {
+          var t = director.clock( 0 ), s = 0;
+
+          if ( t > 1 ) {
+            t = director.clock( 0, true );
+          }
+
+          if ( propagation.isStarting ) {
+            if ( t === 0 ) {
+              propagation.running = true;
+              propagation.isStarting = false;
+            }
+            else {
+              window.wavePropagation = t * t / 2;
+              return
+            }
+          }
+
+          if ( propagation.isStopping ) {
+            if ( t === 0 ) {
+              propagation.running = false;
+              propagation.isStopping = false;
+            }
+            else {
+              window.wavePropagation = 1 - ( 1 - t ) * ( 1 - t ) / 2;
+            }
+            return;
+          }
+
+          if ( propagation.running ) {
+            if ( propagation.shouldStop && ( t === 0 ) ) {
+              propagation.isStopping = true;
+              propagation.shouldStop = false;
+            }
+
+            // during start-up, half a wave has been moved
+            window.wavePropagation = t + .5;
+            return
+          }
+        }
+      } )
+
+      // x-y plane
+      .surface( {
+        id: "vertical-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 0, -1.2 ], [ 0, 1.2 ] ],
+          [ [ 3, -1.2 ], [ 3, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .8,
+        live: false,
+      } ).curve( {
+        id: "vertical-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 0, -1.2, -0.005 ], [ 0, 1.2, -0.005 ], [ 3, 1.2, -0.005 ], [ 3, -1.2, -0.005 ], [ 0, -1.2, -0.005 ]
+        ],
+        live: false,
+      } )
+
+      // x-z plane
+      .surface( {
+        id: "horizontal-plane-surface",
+        n: [ 2, 2 ],
+        color: colors.white,
+        data: [
+          [ [ 0, 0, -1.2 ], [ 0, 0, 1.2 ] ],
+          [ [ 3, 0, -1.2 ], [ 3, 0, 1.2 ] ],
+        ],
+        shaded: false,
+        opacity: .8,
+        live: false,
+      } )
+      .curve( {
+        id: "horizontal-plane-curve",
+        color: colors.gray,
+        lineWidth: 1,
+        n: 5,
+        data: [
+          [ 0, 0.005, -1.2 ], [ 0, 0.005, 1.2 ], [ 3, 0.005, 1.2 ], [ 3, 0.005, -1.2 ], [ 0, 0.005, -1.2 ]
+        ],
+        live: false,
+      } )
+
+      // vertical axis
+      .axis( {
+        id: "vertical-axis",
+        axis: 1,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false,
+        zIndex: -.01,
+      } )
+      // horizontal axis
+      .axis( {
+        id: "horizontal-axis",
+        axis: 2,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false,
+        zIndex: -.01,
+      } )
+      // propagation axis
+      .axis( {
+        id: "propagation-axis",
+        axis: 0,
+        labels: false,
+        ticks: 0,
+        color: colors.black,
+        size: .04,
+        lineWidth: 2,
+        live: false
+      } )
+      .curve( {
+        n: 2,
+        data: [ [ 0, 0.01, -0.01 ], [ 3, 0.01, -0.01 ] ],
+        lineWidth: 2,
+        color: colors.black,
+        live: false
+      } )
+
+
+      // first part of resultant wave
+      .curve( {
+        id: "resultant-curve-1",
+        domain: [ 0, 1 ],
+        n: 192,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ), -.01 ];
+        },
+        line: true,
+        lineWidth: 5,
+        color: colors.black,
+      } )
+      .surface( {
+        id: "resultant-surface-1",
+        n: [ 512, 2 ],
+        domain: [ [ 0, 1 ], [ 0, 1 ] ],
+        expression: function ( x, y ) {
+          if ( x > window.totalDomain ) return [x,0];
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ x, Math.sin( θ ) * y, -.01 ];
+        },
+        shaded: false,
+        opacity: 1,
+        color: colors.gray,
+      } )
+      .vector( {
+        id: "resultant-vector-1",
+        n: 16,
+        expression: function( i, end ) {
+          var x = i / 16;
+
+          if ( x > window.totalDomain ) return [0,0];
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - i/48, 1 ) );
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ) * end * vectorLength, -.01 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+      } )
+
+      
+
+
+      // polarizer 1
+      .platonic( {
+        id: "polarizer-1-surface",
+        type: "cube",
+        opacity: .001,
+        color: colors.white,
+        live: false,
+        mathScale: [ .01, 1.2, 1.2 ],
+        mathPosition: [ 1, .25, 0 ],
+        shaded: false
+      } )
+      .platonic( {
+        id: "polarizer-1-cube",
+        type: "cube",
+        opacity: .001,
+        color: colors.gray,
+        live: false,
+        mesh: false,
+        line: true,
+        mathScale: [ .02, 1.2, 1.2 ],
+        mathPosition: [ 1, .25, 0 ],
+        shaded: false
+      } )
+      .surface( {
+        id: "polarizer-1-lines",
+        color: colors.gray,
+        n: [ 2, 16 ],
+        domain: [ [ -1.2, 1.2 ], [ -1.2, 1.2 ] ],
+        expression: function ( x, y ) {
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ 0, x, y ];
+        },
+        mesh: false,
+        line: true,
+        live: false,
+        zIndex: .2,
+        opacity: .001,
+        mathPosition: [ 1, .25, 0 ]
+      } )
+
+
+
+      // second part of resultant wave
+      .curve( {
+        id: "resultant-curve-2",
+        domain: [ 1, 2 ],
+        n: 192,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var intensity = Math.cos( window.polarizerAngle1 );
+          intensity *= intensity;
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ) * intensity, -.01 ];
+        },
+        line: true,
+        lineWidth: 5,
+        color: colors.black,
+      } )
+      .surface( {
+        id: "resultant-surface-2",
+        n: [ 512, 2 ],
+        domain: [ [ 1, 2 ], [ 0, 1 ] ],
+        expression: function ( x, y ) {
+          if ( x > window.totalDomain ) return [x,0];
+
+          var intensity = Math.cos( window.polarizerAngle1 );
+          intensity *= intensity;
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ x, Math.sin( θ ) * y * intensity, -.01 ];
+        },
+        shaded: false,
+        opacity: 1,
+        color: colors.gray
+      } )
+      .vector( {
+        id: "resultant-vector-2",
+        n: 16,
+        expression: function( i, end ) {
+          var x = 1 + i / 16;
+
+          if ( x > window.totalDomain ) return [0,0];
+
+          var intensity = Math.cos( window.polarizerAngle1 );
+          intensity *= intensity;
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - (16+i)/48, 1 ) );
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ) * end * vectorLength * intensity, -.01 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+      } )
+
+
+
+      // polarizer 2
+      .platonic( {
+        id: "polarizer-2-surface",
+        type: "cube",
+        opacity: .001,
+        color: colors.white,
+        live: false,
+        mathScale: [ .01, 1.2, 1.2 ],
+        mathPosition: [ 2, .25, 0 ],
+        shaded: false
+      } )
+      .platonic( {
+        id: "polarizer-2-cube",
+        type: "cube",
+        opacity: .001,
+        color: colors.gray,
+        live: false,
+        mesh: false,
+        line: true,
+        mathScale: [ .02, 1.2, 1.2 ],
+        mathPosition: [ 2, .25, 0 ],
+        shaded: false
+      } )
+      .surface( {
+        id: "polarizer-2-lines",
+        color: colors.gray,
+        n: [ 2, 16 ],
+        domain: [ [ -1.2, 1.2 ], [ -1.2, 1.2 ] ],
+        expression: function ( x, y ) {
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ 0, x, y ];
+        },
+        mesh: false,
+        line: true,
+        live: false,
+        zIndex: .2,
+        opacity: .001,
+        mathPosition: [ 2, .25, 0 ]
+      } )
+
+
+      // third part of resultant wave
+      .curve( {
+        id: "resultant-curve-3",
+        domain: [ 2, 3 ],
+        n: 192,
+        expression: function ( x, i ) {
+          if ( x > window.totalDomain ) return;
+
+          var intensity = Math.cos( window.polarizerAngle1 - window.polarizerAngle2 ) * Math.cos( window.polarizerAngle1 );
+          intensity *= intensity;
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ) * intensity, -.01 ];
+        },
+        line: true,
+        lineWidth: 5,
+        color: colors.black,
+      } )
+      .surface( {
+        id: "resultant-surface-3",
+        n: [ 512, 2 ],
+        domain: [ [ 2, 3 ], [ 0, 1 ] ],
+        expression: function ( x, y ) {
+          if ( x > window.totalDomain ) return [x,0];
+
+          var intensity = Math.cos( window.polarizerAngle1 - window.polarizerAngle2 ) * Math.cos( window.polarizerAngle1 );
+          intensity *= intensity;
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          // multiply by y to get an actual surface by putting one endpoint on the axis
+          return [ x, Math.sin( θ ) * y * intensity, -.01 ];
+        },
+        shaded: false,
+        opacity: 1,
+        color: colors.gray
+      } )
+      .vector( {
+        id: "resultant-vector-3",
+        n: 16,
+        expression: function( i, end ) {
+          var x = 2 + i / 16;
+
+          if ( x > window.totalDomain ) return [0,0];
+
+          var intensity = Math.cos( window.polarizerAngle1 - window.polarizerAngle2 ) * Math.cos( window.polarizerAngle1 );
+          intensity *= intensity;
+
+          var vectorLength = Math.max( 0, Math.min( window.totalDomain - 1 - (32+i)/48, 1 ) );
+
+          var θ = ( x - window.wavePropagation ) * 2 * π;
+          return [ x, Math.sin( θ ) * end * vectorLength * intensity, -.01 ]
+        },
+        color: colors.black,
+        lineWidth: 1,
+        size: .02,
+      } )
+  }
+
+  /** 
+   * Script
+   */
+  window.mathboxScript = [
+    // draw the resultant wave
+    [
+      [ "animate", "#total-domain", {
+        value: 3
+      }, duration ],
+
+    ],
+
+    // slide in the polarizers
+    [
+      [ "animate", "#polarizer-1-surface, #polarizer-1-lines, #polarizer-1-cube",  {
+        mathPosition: [ 1, 0, 0 ],
+        opacity: .8
+      }, { duration: 200 } ],
+
+      [ "animate", "#polarizer-2-surface, #polarizer-2-lines, #polarizer-2-cube",  {
+        mathPosition: [ 2, 0, 0 ],
+        opacity: .8
+      }, { duration: 200, delay: 50 } ]
+    ],
+
+    [
+      // rotate the first polarizer 45deg
+      [ "animate", "#resultant-curve-2, #resultant-surface-2, #resultant-vector-2, #polarizer-1-surface, #polarizer-1-lines, #polarizer-1-cube", {
+        mathRotation: [ π/4, 0, 0 ]
+      }, { duration: 1000 } ],
+
+      [ "animate", "#polarizer-angle-1", {
+        value: π/4
+      }, { duration: 1000 } ]
+    ],
+
+    [
+      // color the polarizers
+      [ "animate", "#polarizer-1-lines, #polarizer-1-cube", {
+        color: colors.blue,
+      }, duration ],
+      [ "animate", "#polarizer-2-lines, #polarizer-2-cube", {
+        color: colors.green,
+      }, duration ]
+    ],
+  ];
+
+  </script>
+
+  <link href="css/base.css" rel="stylesheet" type="text/css" media="screen">
+</head>
+<body>
+  <div id="mathbox"></div>
+  <div id="controls">
+    <label for="polarizer-orientation-1" class="blue">orientation:
+      <input type=range min="-2" max="2" value="1" step=".001" id="polarizer-orientation-1" list="polarizer-orientation-list" data-min="-π/2" data-max="π/2"/>
+    </label>
+    
+    <label for="polarizer-orientation-2" class="green">orientation:
+      <input type=range min="-2" max="2" value="0" step=".001" id="polarizer-orientation-2" list="polarizer-orientation-list" data-min="-π/2" data-max="π/2"/>
+    </label>
+     
+
+      <datalist id="polarizer-orientation-list">
+        <option>-2</option>
+        <option>-1</option>
+        <option>0</option>
+        <option>1</option>
+        <option>2</option>
+      </datalist>
+  </div>
+</body>
+</html>
